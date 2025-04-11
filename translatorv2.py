@@ -1,4 +1,4 @@
-# nog beter, subject line goed yes
+# end product?
 #!/usr/bin/env python3
 import os
 import base64
@@ -19,12 +19,12 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 TARGET_EMAILS = [
-    "test@gmail.com",
-    "test1@gmail.com",
-    "test2@gmail.com",
-    "baskalter@gmail.com"
+    "baskalter@gmail.com",
+    "kalter44@hotmail.com",
+    "eric.kalter@gmail.com",
+    "sparkimark@hotmail.com"
 ]
-FORWARD_TO = "baskalter@gmail.com"
+FORWARD_TO = "kalter44@hotmail.com"
 
 def translate_to_dutch(text):
     response = client.chat.completions.create(
@@ -156,6 +156,12 @@ def run():
         subject = sanitize_subject(headers.get('Subject', 'No Subject'))
         forward_msg = create_message(FORWARD_TO, f"Translated (NLD): {subject}", html_with_translation, html=True)
         service.users().messages().send(userId=user_id, body=forward_msg).execute()
+        
+        service.users().messages().modify(
+            userId=user_id,
+            id=msg['id'],
+            body={'removeLabelIds': ['UNREAD']}
+        ).execute()
 
 if __name__ == '__main__':
     run()
