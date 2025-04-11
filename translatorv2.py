@@ -1,4 +1,4 @@
-# end product?
+# end product - 2 emails
 #!/usr/bin/env python3
 import os
 import base64
@@ -24,7 +24,7 @@ TARGET_EMAILS = [
     "eric.kalter@gmail.com",
     "sparkimark@hotmail.com"
 ]
-FORWARD_TO = "kalter44@hotmail.com"
+FORWARD_TO = ["baskalter@gmail.com", "kalter44@hotmail.com"]
 
 def translate_to_dutch(text):
     response = client.chat.completions.create(
@@ -64,7 +64,7 @@ def create_message(to, subject, message_text, html=False):
         message = MIMEText(message_text, 'html')
     else:
         message = MIMEText(message_text)
-    message['to'] = to
+    message['to'] = ", ".join(to) if isinstance(to, list) else to
     message['subject'] = subject
     raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
     return {'raw': raw}
