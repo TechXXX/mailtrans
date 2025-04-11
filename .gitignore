@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+
+# Gmail API
+credentials.json
+token.json
+
+# MacOS
+.DS_Store
