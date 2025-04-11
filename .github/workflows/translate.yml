@@ -1,4 +1,5 @@
 # force trigger
+# workflow init trigger
 name: Gmail Translator
 
 on:
