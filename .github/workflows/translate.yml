@@ -1,0 +1,33 @@
+name: Gmail Translator
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # runs every hour
+  workflow_dispatch:     # allows manual trigger
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Decode credentials
+        run: |
+          echo "$GOOGLE_CREDS" | base64 -d > credentials.json
+          echo "$GOOGLE_TOKEN" | base64 -d > token.json
+
+      - name: Run the script
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_CREDS: ${{ secrets.GOOGLE_CREDS }}
+          GOOGLE_TOKEN: ${{ secrets.GOOGLE_TOKEN }}
+        run: python extractmail.py
