@@ -145,11 +145,23 @@ def run():
         cleaned_text = re.sub(r'\s{2,}', ' ', cleaned_text).strip()
         translated_text = translate_to_dutch(cleaned_text)
 
-        for tag in soup.find_all(["p", "span", "li", "h1", "h2", "h3"]):
-            original = tag.get_text(strip=True)
-            if original and len(original) > 20 and "unsubscribe" not in original.lower():
-                translated = translate_to_dutch(original)
-                tag.string = translated
+        # Find most text-heavy div
+        candidate_divs = []
+        for div in soup.find_all("div"):
+            if "unsubscribe" in div.get_text().lower():
+                continue
+            paragraphs = div.find_all("p")
+            total_length = sum(len(p.get_text()) for p in paragraphs)
+            if total_length > 100:
+                candidate_divs.append((total_length, div))
+
+        if candidate_divs:
+            _, best_div = max(candidate_divs, key=lambda x: x[0])
+            for p in best_div.find_all("p"):
+                p.clear()
+
+            for p_tag, sentence in zip(best_div.find_all("p"), translated_text.split("\n")):
+                p_tag.string = sentence.strip()
 
         html_with_translation = str(soup)
 
@@ -163,5 +175,5 @@ def run():
             body={'removeLabelIds': ['UNREAD']}
         ).execute()
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    run()
