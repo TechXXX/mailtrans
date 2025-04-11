@@ -1,4 +1,4 @@
-# nog beter, subject line goed
+# nog beter, subject line goed yes
 #!/usr/bin/env python3
 import os
 import base64
