@@ -1,4 +1,3 @@
-# end product - 2 emails
 #!/usr/bin/env python3
 import os
 import base64
@@ -99,7 +98,12 @@ def run():
     messages = results.get('messages', [])
 
     for msg in messages:
-        msg_data = service.users().messages().get(userId=user_id, id=msg['id'], format='metadata', metadataHeaders=['To', 'Cc', 'From', 'Subject']).execute()
+        try:
+            msg_data = service.users().messages().get(userId=user_id, id=msg['id'], format='metadata', metadataHeaders=['To', 'Cc', 'From', 'Subject']).execute()
+        except Exception as e:
+            print(f"Skipping message {msg['id']} due to error: {e}")
+            continue
+
         headers = {h['name']: h['value'] for h in msg_data['payload']['headers']}
         to = headers.get('To', '').lower()
         cc = headers.get('Cc', '').lower()
@@ -108,7 +112,12 @@ def run():
         if not all(email.lower() in recipients for email in TARGET_EMAILS):
             continue
 
-        full_msg = service.users().messages().get(userId=user_id, id=msg['id'], format='full').execute()
+        try:
+            full_msg = service.users().messages().get(userId=user_id, id=msg['id'], format='full').execute()
+        except Exception as e:
+            print(f"Skipping full message fetch for {msg['id']} due to error: {e}")
+            continue
+
         payload = full_msg['payload']
         parts = payload.get('parts', [])
         message_body = ""
