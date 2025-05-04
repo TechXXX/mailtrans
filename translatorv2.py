@@ -4,6 +4,7 @@ import base64
 import datetime
 import re
 import html
+import openai
 from bs4 import BeautifulSoup
 from email.mime.text import MIMEText
 from google.auth.transport.requests import Request
