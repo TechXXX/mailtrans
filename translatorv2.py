@@ -4,13 +4,14 @@ import base64
 import datetime
 import re
 import html
+import time # Toegevoegd voor retry delay
 from bs4 import BeautifulSoup
 from email.mime.text import MIMEText
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from openai import OpenAI
+from openai import OpenAI, APIError, APIConnectionError, RateLimitError, InternalServerError # Specifieke exceptions toegevoegd
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,15 +27,36 @@ TARGET_EMAILS = [
 FORWARD_TO = ["baskalter@gmail.com", "kalter44@hotmail.com"]
 
 def translate_to_dutch(text):
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "You are a professional Dutch translator."},
-            {"role": "user", "content": f"Translate the following text to Dutch:\n\n{text}"}
-        ],
-        temperature=0.3,
-    )
-    return response.choices[0].message.content.strip()
+    max_retries = 10
+    retry_delay_seconds = 600 # 10 minuten
+    last_exception = None
+
+    for attempt in range(max_retries):
+        try:
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional Dutch translator."},
+                    {"role": "user", "content": f"Translate the following text to Dutch:\n\n{text}"}
+                ],
+                temperature=0.3,
+            )
+            return response.choices[0].message.content.strip()
+        except (InternalServerError, APIConnectionError, RateLimitError) as e:
+            last_exception = e
+            print(f"OpenAI API error: {e}. Attempt {attempt + 1} of {max_retries}. Retrying in {retry_delay_seconds} seconds...")
+            time.sleep(retry_delay_seconds)
+        except APIError as e: # Vang andere generieke API fouten
+            last_exception = e
+            print(f"General OpenAI API error: {e}. Attempt {attempt + 1} of {max_retries}. Retrying in {retry_delay_seconds} seconds...")
+            time.sleep(retry_delay_seconds)
+        except Exception as e: # Vang onverwachte fouten
+            print(f"An unexpected error occurred during translation: {e}")
+            raise # Her-raise onverwachte fouten direct
+
+    if last_exception:
+        print(f"Failed to translate after {max_retries} attempts.")
+        raise last_exception # Her-raise de laatst opgevangen OpenAI fout
 
 def get_service():
     creds = None
@@ -152,13 +174,19 @@ def run():
 
         cleaned_text = ' '.join(cleaned_lines)
         cleaned_text = re.sub(r'\s{2,}', ' ', cleaned_text).strip()
+        
         translated_text = translate_to_dutch(cleaned_text)
 
         for tag in soup.find_all(["p", "span", "li", "h1", "h2", "h3"]):
             original = tag.get_text(strip=True)
             if original and len(original) > 20 and "unsubscribe" not in original.lower():
-                translated = translate_to_dutch(original)
-                tag.string = translated
+                # Als een segment hier faalt na 10x10min, stopt het hele script.
+                # Dit is volgens de wens om pas een error mail te krijgen na langdurige problemen.
+                translated_segment = translate_to_dutch(original)
+                tag.string = translated_segment
+                # Als je wilt dat het script doorgaat met de volgende mail bij een segmentfout,
+                # dan moet hier alsnog een try-except (InternalServerError, etc.) omheen.
+                # Voor nu laten we het zo dat het script stopt.
 
         html_with_translation = str(soup)
 
