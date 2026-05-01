@@ -73,6 +73,69 @@ Manual runs use the dropdown selection for that run only.
 
 Scheduled hourly runs still use the repository variable `LLM_PROVIDER`, so set that variable to whichever provider you want as the default background behavior.
 
+Manual runs also support optional test inputs:
+
+- `test_subject_contains`
+- `test_from`
+
+That means you can trigger a one-off GitHub test run for a specific email directly from the Actions page without editing repository variables each time.
+
+## Test One Email
+
+The script also supports a test mode for translating one chosen email by subject and/or sender.
+
+In test mode:
+
+- the normal `TARGET_EMAILS` recipient check is skipped
+- the translated result is forwarded only to `baskalter@hotmail.com` by default
+- the forwarded subject includes the provider name, for example `Translated (DEEPSEEK, NLD): ...`
+- the original email is not marked as read unless you explicitly enable that
+
+### Test by subject
+
+Add these to `.env` for a one-email test:
+
+```env
+TEST_SUBJECT_CONTAINS=your subject text here
+TEST_FORWARD_TO=baskalter@hotmail.com
+TEST_MARK_READ=false
+```
+
+### Test by sender
+
+```env
+TEST_FROM=sender@example.com
+TEST_FORWARD_TO=baskalter@hotmail.com
+TEST_MARK_READ=false
+```
+
+### Test by subject and sender together
+
+```env
+TEST_SUBJECT_CONTAINS=your subject text here
+TEST_FROM=sender@example.com
+TEST_FORWARD_TO=baskalter@hotmail.com
+TEST_MARK_READ=false
+```
+
+The script will search for matching messages, take the most recent match returned by Gmail, translate it, and forward only that translation to your test address.
+
+### GitHub test run
+
+From the GitHub website:
+
+1. Open `Actions`.
+2. Select `Run Gmail Translator`.
+3. Click `Run workflow`.
+4. Choose `deepseek` or `openai`.
+5. Optionally fill in `test_subject_contains`.
+6. Optionally fill in `test_from`.
+7. Start the run.
+
+If either test field is filled in, the workflow runs in test mode and forwards only the matching translation to `baskalter@hotmail.com` unless you changed `TEST_FORWARD_TO`.
+
+When you are done testing, remove `TEST_SUBJECT_CONTAINS` and `TEST_FROM` from `.env` to return to normal mailbox processing.
+
 ## Files
 
 - [`translatorv2.py`](/Users/kalter/Documents/CODEX/mailtrans/translatorv2.py): main translation and forwarding script
@@ -112,7 +175,7 @@ Example DeepSeek `.env`:
 ```env
 LLM_PROVIDER=deepseek
 DEEPSEEK_API_KEY=your_deepseek_api_key_here
-DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_MODEL=deepseek-v4-pro
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 ```
 
@@ -177,7 +240,7 @@ or:
 ```yaml
 env:
   LLM_PROVIDER: deepseek
-  DEEPSEEK_MODEL: deepseek-v4-flash
+  DEEPSEEK_MODEL: deepseek-v4-pro
   DEEPSEEK_BASE_URL: https://api.deepseek.com
 ```
 

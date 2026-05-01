@@ -15,6 +15,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def env_flag(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
 def get_llm_config():
     provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
 
@@ -58,6 +64,11 @@ TARGET_EMAILS = [
     "sparkimark@hotmail.com"
 ]
 FORWARD_TO = ["baskalter@gmail.com", "kalter44@hotmail.com"]
+TEST_SUBJECT_CONTAINS = os.getenv("TEST_SUBJECT_CONTAINS", "").strip()
+TEST_FROM = os.getenv("TEST_FROM", "").strip().lower()
+TEST_FORWARD_TO = os.getenv("TEST_FORWARD_TO", "baskalter@hotmail.com").strip()
+TEST_MARK_READ = env_flag("TEST_MARK_READ", default=False)
+TEST_MODE = bool(TEST_SUBJECT_CONTAINS or TEST_FROM)
 
 def translate_to_dutch(text):
     max_retries = 10
@@ -133,10 +144,39 @@ def extract_html_from_parts(parts):
                 return nested
     return ""
 
+def build_search_query():
+    if TEST_MODE:
+        query_parts = []
+        if TEST_SUBJECT_CONTAINS:
+            escaped_subject = TEST_SUBJECT_CONTAINS.replace('"', '\\"')
+            query_parts.append(f'subject:"{escaped_subject}"')
+        if TEST_FROM:
+            query_parts.append(f"from:{TEST_FROM}")
+        return " ".join(query_parts)
+
+    after = get_month_range()
+    return f"is:unread after:{after}"
+
+def subject_matches_test_filter(subject):
+    if not TEST_SUBJECT_CONTAINS:
+        return True
+    return TEST_SUBJECT_CONTAINS.lower() in subject.lower()
+
+def sender_matches_test_filter(sender):
+    if not TEST_FROM:
+        return True
+    return TEST_FROM in sender.lower()
+
 def run():
     print(
         f"Using LLM provider '{LLM_CONFIG['provider']}' with model '{LLM_CONFIG['model']}'."
     )
+    if TEST_MODE:
+        print(
+            "Test mode enabled "
+            f"(subject contains: '{TEST_SUBJECT_CONTAINS or '*'}', "
+            f"from: '{TEST_FROM or '*'}')."
+        )
 
     def extract_text_from_parts(parts):
         for part in parts:
@@ -150,25 +190,52 @@ def run():
 
     service = get_service()
     user_id = 'me'
-    after = get_month_range()
-    query = f"is:unread after:{after}"
+    query = build_search_query()
+    list_kwargs = {
+        'userId': user_id,
+        'q': query,
+    }
+    if TEST_MODE:
+        list_kwargs['maxResults'] = 25
 
-    results = service.users().messages().list(userId=user_id, q=query).execute()
+    results = service.users().messages().list(**list_kwargs).execute()
     messages = results.get('messages', [])
+
+    if TEST_MODE and messages:
+        messages = list(reversed(messages))
+    elif TEST_MODE:
+        print("Test mode found no candidate messages.")
+        return
+
+    test_translation_sent = False
 
     for msg in messages:
         try:
-            msg_data = service.users().messages().get(userId=user_id, id=msg['id'], format='metadata', metadataHeaders=['To', 'Cc', 'From', 'Subject']).execute()
+            msg_data = service.users().messages().get(
+                userId=user_id,
+                id=msg['id'],
+                format='metadata',
+                metadataHeaders=['To', 'Cc', 'From', 'Subject']
+            ).execute()
         except Exception as e:
             print(f"Skipping message {msg['id']} due to error: {e}")
             continue
 
         headers = {h['name']: h['value'] for h in msg_data['payload']['headers']}
+        subject_header = headers.get('Subject', 'No Subject')
+        from_header = headers.get('From', '')
+
+        if TEST_MODE:
+            if not subject_matches_test_filter(subject_header):
+                continue
+            if not sender_matches_test_filter(from_header):
+                continue
+
         to = headers.get('To', '').lower()
         cc = headers.get('Cc', '').lower()
         recipients = f"{to},{cc}"
 
-        if not all(email.lower() in recipients for email in TARGET_EMAILS):
+        if not TEST_MODE and not all(email.lower() in recipients for email in TARGET_EMAILS):
             continue
 
         try:
@@ -227,15 +294,35 @@ def run():
 
         html_with_translation = str(soup)
 
-        subject = sanitize_subject(headers.get('Subject', 'No Subject'))
-        forward_msg = create_message(FORWARD_TO, f"Translated (NLD): {subject}", html_with_translation, html=True)
+        subject = sanitize_subject(subject_header)
+        provider_label = LLM_CONFIG["provider"]
+        forward_recipients = [TEST_FORWARD_TO] if TEST_MODE else FORWARD_TO
+        forward_subject = f"Translated ({provider_label.upper()}, NLD): {subject}"
+        forward_msg = create_message(forward_recipients, forward_subject, html_with_translation, html=True)
         service.users().messages().send(userId=user_id, body=forward_msg).execute()
-        
+
+        if TEST_MODE:
+            test_translation_sent = True
+            print(
+                f"Test translation forwarded for message {msg['id']} "
+                f"to {TEST_FORWARD_TO}."
+            )
+            if TEST_MARK_READ:
+                service.users().messages().modify(
+                    userId=user_id,
+                    id=msg['id'],
+                    body={'removeLabelIds': ['UNREAD']}
+                ).execute()
+            break
+
         service.users().messages().modify(
             userId=user_id,
             id=msg['id'],
             body={'removeLabelIds': ['UNREAD']}
         ).execute()
+
+    if TEST_MODE and not test_translation_sent:
+        print("Test mode did not find a message matching the requested filters.")
 
 if __name__ == '__main__':
     run()
