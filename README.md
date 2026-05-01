@@ -91,6 +91,7 @@ In test mode:
 - the forwarded subject includes the provider name, for example `Translated (DEEPSEEK, NLD): ...`
 - the original email is not marked as read unless you explicitly enable that
 - retry behavior is shorter by default so failed API calls do not look stuck during testing
+- by default it translates the cleaned email body once and skips per-segment HTML translation for faster provider comparison
 
 ### Test by subject
 
@@ -100,6 +101,7 @@ Add these to `.env` for a one-email test:
 TEST_SUBJECT_CONTAINS=your subject text here
 TEST_FORWARD_TO=baskalter@hotmail.com
 TEST_MARK_READ=false
+TEST_SIMPLE_MODE=true
 ```
 
 ### Test by sender
@@ -108,6 +110,7 @@ TEST_MARK_READ=false
 TEST_FROM=sender@example.com
 TEST_FORWARD_TO=baskalter@hotmail.com
 TEST_MARK_READ=false
+TEST_SIMPLE_MODE=true
 ```
 
 ### Test by subject and sender together
@@ -117,6 +120,7 @@ TEST_SUBJECT_CONTAINS=your subject text here
 TEST_FROM=sender@example.com
 TEST_FORWARD_TO=baskalter@hotmail.com
 TEST_MARK_READ=false
+TEST_SIMPLE_MODE=true
 ```
 
 The script will search for matching messages, take the most recent match returned by Gmail, translate it, and forward only that translation to your test address.
@@ -134,6 +138,8 @@ From the GitHub website:
 7. Start the run.
 
 If either test field is filled in, the workflow runs in test mode and forwards only the matching translation to `baskalter@hotmail.com` unless you changed `TEST_FORWARD_TO`.
+
+With `TEST_SIMPLE_MODE=true` (the default), test mode sends a simple translated result based on the cleaned body only. This avoids many slow per-segment translation calls and makes OpenAI vs DeepSeek comparison much faster.
 
 ### Test retry tuning
 

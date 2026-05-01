@@ -2,6 +2,7 @@
 import os
 import base64
 import datetime
+import html
 import re
 import time # Toegevoegd voor retry delay
 from bs4 import BeautifulSoup
@@ -69,6 +70,7 @@ TEST_FROM = os.getenv("TEST_FROM", "").strip().lower()
 TEST_FORWARD_TO = os.getenv("TEST_FORWARD_TO", "baskalter@hotmail.com").strip()
 TEST_MARK_READ = env_flag("TEST_MARK_READ", default=False)
 TEST_MODE = bool(TEST_SUBJECT_CONTAINS or TEST_FROM)
+TEST_SIMPLE_MODE = env_flag("TEST_SIMPLE_MODE", default=True)
 MAX_RETRIES = int(os.getenv("TRANSLATION_MAX_RETRIES", "3" if TEST_MODE else "10"))
 RETRY_DELAY_SECONDS = int(os.getenv("TRANSLATION_RETRY_DELAY_SECONDS", "20" if TEST_MODE else "600"))
 
@@ -108,6 +110,24 @@ def translate_to_dutch(text):
         print(f"Failed to translate after {MAX_RETRIES} attempts.")
         raise last_exception # Her-raise de laatst opgevangen OpenAI fout
 
+def send_with_retries(service, user_id, message_body):
+    last_exception = None
+
+    for attempt in range(3):
+        try:
+            service.users().messages().send(userId=user_id, body=message_body).execute()
+            return
+        except Exception as e:
+            last_exception = e
+            print(
+                f"Gmail send error: {e}. Attempt {attempt + 1} of 3. "
+                "Retrying in 5 seconds..."
+            )
+            time.sleep(5)
+
+    if last_exception:
+        raise last_exception
+
 def get_service():
     creds = None
     if os.path.exists('token.json'):
@@ -139,6 +159,26 @@ def create_message(to, subject, message_text, html=False):
     message['subject'] = subject
     raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
     return {'raw': raw}
+
+def format_test_translation_html(subject, sender, translated_text):
+    safe_subject = html.escape(subject)
+    safe_sender = html.escape(sender)
+    safe_provider = html.escape(LLM_CONFIG["provider"])
+    safe_model = html.escape(LLM_CONFIG["model"])
+    safe_translation = html.escape(translated_text).replace("\n", "<br>\n")
+    return f"""
+    <html>
+      <body>
+        <h2>Translated Test Email</h2>
+        <p><strong>Provider:</strong> {safe_provider}</p>
+        <p><strong>Model:</strong> {safe_model}</p>
+        <p><strong>From:</strong> {safe_sender}</p>
+        <p><strong>Subject:</strong> {safe_subject}</p>
+        <hr>
+        <div>{safe_translation}</div>
+      </body>
+    </html>
+    """.strip()
 
 def extract_html_from_parts(parts):
     for part in parts:
@@ -295,20 +335,22 @@ def run():
         print(f"Translating cleaned email body ({len(cleaned_text)} chars).")
         translated_text = translate_to_dutch(cleaned_text)
         print(f"Cleaned body translated ({len(translated_text)} chars).")
+        if TEST_MODE and TEST_SIMPLE_MODE:
+            print("Test simple mode enabled: skipping per-segment HTML translation.")
+            html_with_translation = format_test_translation_html(
+                subject_header,
+                from_header,
+                translated_text,
+            )
+        else:
+            for tag in soup.find_all(["p", "span", "li", "h1", "h2", "h3"]):
+                original = tag.get_text(strip=True)
+                if original and len(original) > 20 and "unsubscribe" not in original.lower():
+                    print(f"Translating HTML segment ({len(original)} chars).")
+                    translated_segment = translate_to_dutch(original)
+                    tag.string = translated_segment
 
-        for tag in soup.find_all(["p", "span", "li", "h1", "h2", "h3"]):
-            original = tag.get_text(strip=True)
-            if original and len(original) > 20 and "unsubscribe" not in original.lower():
-                print(f"Translating HTML segment ({len(original)} chars).")
-                # Als een segment hier faalt na 10x10min, stopt het hele script.
-                # Dit is volgens de wens om pas een error mail te krijgen na langdurige problemen.
-                translated_segment = translate_to_dutch(original)
-                tag.string = translated_segment
-                # Als je wilt dat het script doorgaat met de volgende mail bij een segmentfout,
-                # dan moet hier alsnog een try-except (InternalServerError, etc.) omheen.
-                # Voor nu laten we het zo dat het script stopt.
-
-        html_with_translation = str(soup)
+            html_with_translation = str(soup)
 
         subject = sanitize_subject(subject_header)
         provider_label = LLM_CONFIG["provider"]
@@ -319,7 +361,7 @@ def run():
             f"with subject '{forward_subject}'."
         )
         forward_msg = create_message(forward_recipients, forward_subject, html_with_translation, html=True)
-        service.users().messages().send(userId=user_id, body=forward_msg).execute()
+        send_with_retries(service, user_id, forward_msg)
 
         if TEST_MODE:
             test_translation_sent = True
