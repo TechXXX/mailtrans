@@ -3,7 +3,6 @@ import os
 import base64
 import datetime
 import re
-import html
 import time # Toegevoegd voor retry delay
 from bs4 import BeautifulSoup
 from email.mime.text import MIMEText
@@ -15,7 +14,41 @@ from openai import OpenAI, APIError, APIConnectionError, RateLimitError, Interna
 from dotenv import load_dotenv
 
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+def get_llm_config():
+    provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
+
+    if provider == "openai":
+        api_key = os.getenv("OPENAI_API_KEY")
+        model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+        base_url = os.getenv("OPENAI_BASE_URL")
+    elif provider == "deepseek":
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        model = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+    else:
+        raise ValueError(
+            "Unsupported LLM_PROVIDER. Use 'openai' or 'deepseek'."
+        )
+
+    if not api_key:
+        raise ValueError(
+            f"Missing API key for provider '{provider}'. "
+            f"Set {'OPENAI_API_KEY' if provider == 'openai' else 'DEEPSEEK_API_KEY'}."
+        )
+
+    return {
+        "provider": provider,
+        "model": model,
+        "base_url": base_url,
+        "api_key": api_key,
+    }
+
+LLM_CONFIG = get_llm_config()
+client = OpenAI(
+    api_key=LLM_CONFIG["api_key"],
+    base_url=LLM_CONFIG["base_url"],
+)
 
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 TARGET_EMAILS = [
@@ -34,7 +67,7 @@ def translate_to_dutch(text):
     for attempt in range(max_retries):
         try:
             response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model=LLM_CONFIG["model"],
                 messages=[
                     {"role": "system", "content": "You are a professional Dutch translator."},
                     {"role": "user", "content": f"Translate the following text to Dutch:\n\n{text}"}
@@ -101,6 +134,10 @@ def extract_html_from_parts(parts):
     return ""
 
 def run():
+    print(
+        f"Using LLM provider '{LLM_CONFIG['provider']}' with model '{LLM_CONFIG['model']}'."
+    )
+
     def extract_text_from_parts(parts):
         for part in parts:
             if part['mimeType'] == 'text/html' and 'data' in part['body']:
