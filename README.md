@@ -90,6 +90,7 @@ In test mode:
 - the translated result is forwarded only to `baskalter@hotmail.com` by default
 - the forwarded subject includes the provider name, for example `Translated (DEEPSEEK, NLD): ...`
 - the original email is not marked as read unless you explicitly enable that
+- retry behavior is shorter by default so failed API calls do not look stuck during testing
 
 ### Test by subject
 
@@ -133,6 +134,17 @@ From the GitHub website:
 7. Start the run.
 
 If either test field is filled in, the workflow runs in test mode and forwards only the matching translation to `baskalter@hotmail.com` unless you changed `TEST_FORWARD_TO`.
+
+### Test retry tuning
+
+You can also control retry behavior with:
+
+```env
+TRANSLATION_MAX_RETRIES=3
+TRANSLATION_RETRY_DELAY_SECONDS=20
+```
+
+These are especially useful for GitHub testing so a transient API failure does not pause the run for 10 minutes.
 
 When you are done testing, remove `TEST_SUBJECT_CONTAINS` and `TEST_FROM` from `.env` to return to normal mailbox processing.
 

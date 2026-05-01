@@ -69,13 +69,13 @@ TEST_FROM = os.getenv("TEST_FROM", "").strip().lower()
 TEST_FORWARD_TO = os.getenv("TEST_FORWARD_TO", "baskalter@hotmail.com").strip()
 TEST_MARK_READ = env_flag("TEST_MARK_READ", default=False)
 TEST_MODE = bool(TEST_SUBJECT_CONTAINS or TEST_FROM)
+MAX_RETRIES = int(os.getenv("TRANSLATION_MAX_RETRIES", "3" if TEST_MODE else "10"))
+RETRY_DELAY_SECONDS = int(os.getenv("TRANSLATION_RETRY_DELAY_SECONDS", "20" if TEST_MODE else "600"))
 
 def translate_to_dutch(text):
-    max_retries = 10
-    retry_delay_seconds = 600 # 10 minuten
     last_exception = None
 
-    for attempt in range(max_retries):
+    for attempt in range(MAX_RETRIES):
         try:
             response = client.chat.completions.create(
                 model=LLM_CONFIG["model"],
@@ -88,18 +88,24 @@ def translate_to_dutch(text):
             return response.choices[0].message.content.strip()
         except (InternalServerError, APIConnectionError, RateLimitError) as e:
             last_exception = e
-            print(f"OpenAI API error: {e}. Attempt {attempt + 1} of {max_retries}. Retrying in {retry_delay_seconds} seconds...")
-            time.sleep(retry_delay_seconds)
+            print(
+                f"LLM API error: {e}. Attempt {attempt + 1} of {MAX_RETRIES}. "
+                f"Retrying in {RETRY_DELAY_SECONDS} seconds..."
+            )
+            time.sleep(RETRY_DELAY_SECONDS)
         except APIError as e: # Vang andere generieke API fouten
             last_exception = e
-            print(f"General OpenAI API error: {e}. Attempt {attempt + 1} of {max_retries}. Retrying in {retry_delay_seconds} seconds...")
-            time.sleep(retry_delay_seconds)
+            print(
+                f"General LLM API error: {e}. Attempt {attempt + 1} of {MAX_RETRIES}. "
+                f"Retrying in {RETRY_DELAY_SECONDS} seconds..."
+            )
+            time.sleep(RETRY_DELAY_SECONDS)
         except Exception as e: # Vang onverwachte fouten
             print(f"An unexpected error occurred during translation: {e}")
             raise # Her-raise onverwachte fouten direct
 
     if last_exception:
-        print(f"Failed to translate after {max_retries} attempts.")
+        print(f"Failed to translate after {MAX_RETRIES} attempts.")
         raise last_exception # Her-raise de laatst opgevangen OpenAI fout
 
 def get_service():
@@ -171,6 +177,10 @@ def run():
     print(
         f"Using LLM provider '{LLM_CONFIG['provider']}' with model '{LLM_CONFIG['model']}'."
     )
+    print(
+        f"Translation retries configured: max_retries={MAX_RETRIES}, "
+        f"retry_delay_seconds={RETRY_DELAY_SECONDS}."
+    )
     if TEST_MODE:
         print(
             "Test mode enabled "
@@ -203,6 +213,7 @@ def run():
 
     if TEST_MODE and messages:
         messages = list(reversed(messages))
+        print(f"Test mode found {len(messages)} candidate message(s) from Gmail search.")
     elif TEST_MODE:
         print("Test mode found no candidate messages.")
         return
@@ -230,6 +241,9 @@ def run():
                 continue
             if not sender_matches_test_filter(from_header):
                 continue
+            print(
+                f"Testing message {msg['id']} from '{from_header}' with subject '{subject_header}'."
+            )
 
         to = headers.get('To', '').lower()
         cc = headers.get('Cc', '').lower()
@@ -278,12 +292,14 @@ def run():
 
         cleaned_text = ' '.join(cleaned_lines)
         cleaned_text = re.sub(r'\s{2,}', ' ', cleaned_text).strip()
-        
+        print(f"Translating cleaned email body ({len(cleaned_text)} chars).")
         translated_text = translate_to_dutch(cleaned_text)
+        print(f"Cleaned body translated ({len(translated_text)} chars).")
 
         for tag in soup.find_all(["p", "span", "li", "h1", "h2", "h3"]):
             original = tag.get_text(strip=True)
             if original and len(original) > 20 and "unsubscribe" not in original.lower():
+                print(f"Translating HTML segment ({len(original)} chars).")
                 # Als een segment hier faalt na 10x10min, stopt het hele script.
                 # Dit is volgens de wens om pas een error mail te krijgen na langdurige problemen.
                 translated_segment = translate_to_dutch(original)
@@ -298,6 +314,10 @@ def run():
         provider_label = LLM_CONFIG["provider"]
         forward_recipients = [TEST_FORWARD_TO] if TEST_MODE else FORWARD_TO
         forward_subject = f"Translated ({provider_label.upper()}, NLD): {subject}"
+        print(
+            f"Forwarding translated message to {', '.join(forward_recipients)} "
+            f"with subject '{forward_subject}'."
+        )
         forward_msg = create_message(forward_recipients, forward_subject, html_with_translation, html=True)
         service.users().messages().send(userId=user_id, body=forward_msg).execute()
 

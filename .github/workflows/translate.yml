@@ -36,6 +36,8 @@ jobs:
       TEST_FROM: ${{ inputs.test_from || vars.TEST_FROM || '' }}
       TEST_FORWARD_TO: ${{ vars.TEST_FORWARD_TO || 'baskalter@hotmail.com' }}
       TEST_MARK_READ: ${{ vars.TEST_MARK_READ || 'false' }}
+      TRANSLATION_MAX_RETRIES: ${{ vars.TRANSLATION_MAX_RETRIES || '3' }}
+      TRANSLATION_RETRY_DELAY_SECONDS: ${{ vars.TRANSLATION_RETRY_DELAY_SECONDS || '20' }}
     steps:
       - uses: actions/checkout@v3
 
@@ -72,7 +74,9 @@ jobs:
           TEST_FROM=${{ env.TEST_FROM }}
           TEST_FORWARD_TO=${{ env.TEST_FORWARD_TO }}
           TEST_MARK_READ=${{ env.TEST_MARK_READ }}
+          TRANSLATION_MAX_RETRIES=${{ env.TRANSLATION_MAX_RETRIES }}
+          TRANSLATION_RETRY_DELAY_SECONDS=${{ env.TRANSLATION_RETRY_DELAY_SECONDS }}
           EOF
 
       - name: Run Gmail translator script
-        run: python translatorv2.py
+        run: python -u translatorv2.py
