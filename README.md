@@ -22,7 +22,7 @@ The script now supports both OpenAI and DeepSeek through environment variables.
 Default behavior:
 
 - `LLM_PROVIDER=openai`
-- `OPENAI_MODEL=gpt-3.5-turbo`
+- `OPENAI_MODEL=gpt-4o-mini`
 
 If you run this project through GitHub Actions, GitHub uses whichever provider and model are configured through repository secrets or workflow environment variables, because the workflow simply runs:
 
@@ -41,7 +41,7 @@ You can switch providers without editing Python code.
 ```env
 LLM_PROVIDER=openai
 OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-3.5-turbo
+OPENAI_MODEL=gpt-4o-mini
 ```
 
 ### DeepSeek
@@ -185,7 +185,7 @@ Create a `.env` file in the project root:
 ```env
 LLM_PROVIDER=openai
 OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-3.5-turbo
+OPENAI_MODEL=gpt-4o-mini
 ```
 
 Example DeepSeek `.env`:
@@ -250,7 +250,7 @@ Then set the default provider and optional model selection in repository variabl
 ```yaml
 env:
   LLM_PROVIDER: openai
-  OPENAI_MODEL: gpt-3.5-turbo
+  OPENAI_MODEL: gpt-4o-mini
 ```
 
 or:

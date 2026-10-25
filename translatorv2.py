@@ -27,7 +27,7 @@ def get_llm_config():
 
     if provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
-        model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+        model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         base_url = os.getenv("OPENAI_BASE_URL")
     elif provider == "deepseek":
         api_key = os.getenv("DEEPSEEK_API_KEY")

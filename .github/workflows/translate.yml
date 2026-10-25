@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       LLM_PROVIDER: ${{ inputs.llm_provider || vars.LLM_PROVIDER || 'openai' }}
-      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-3.5-turbo' }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o-mini' }}
       DEEPSEEK_MODEL: ${{ vars.DEEPSEEK_MODEL || 'deepseek-v4-pro' }}
       DEEPSEEK_BASE_URL: ${{ vars.DEEPSEEK_BASE_URL || 'https://api.deepseek.com' }}
       TEST_SUBJECT_CONTAINS: ${{ inputs.test_subject_contains || vars.TEST_SUBJECT_CONTAINS || '' }}
